@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security Gateway - Admin Dashboard</title>
+<style>
+  :root{--bg:#0f1419;--panel:#171d25;--line:#2a323d;--text:#e6e9ee;--muted:#8a94a3;
+        --sqli:#ff6b6b;--api:#f5a623;--ban:#9b8cff;--ok:#3ddc97}
+  @media (prefers-color-scheme: light){
+    :root{--bg:#f4f6f9;--panel:#fff;--line:#dde2ea;--text:#1b2430;--muted:#667085}
+  }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    padding:16px 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{font-size:18px;margin:0} .sub{color:var(--muted);font-size:12px}
+  .live{display:inline-flex;align-items:center;gap:6px;color:var(--ok);font-size:12px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:p 1.4s infinite}
+  @keyframes p{50%{opacity:.25}}
+  main{padding:20px 24px;max-width:1280px;margin:0 auto}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card .n{font-size:28px;font-weight:700} .card .l{color:var(--muted);font-size:12px}
+  .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;min-width:820px}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  tr.new{animation:flash 1.6s ease-out}
+  @keyframes flash{from{background:rgba(255,107,107,.25)}to{background:transparent}}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#111}
+  .SQL_INJECTION{background:var(--sqli)} .API_INJECTION{background:var(--api)} .IP_BANNED{background:var(--ban)} .RATE_LIMIT{background:#4cc9f0}
+  code{font-family:ui-monospace,Consolas,monospace;font-size:12px;word-break:break-all}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  button{background:transparent;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:6px 12px;cursor:pointer} button:hover{border-color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Security Gateway &mdash; Admin Dashboard</h1>
+    <div class="sub">OpenResty + Lua &middot; cảnh báo cập nhật mỗi 2 giây</div>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center">
+    <span class="live"><span class="dot"></span><span id="status">đang kết nối…</span></span>
+    <button id="clear">Xóa log (reset demo)</button>
+  </div>
+</header>
+<main>
+  <section class="cards">
+    <div class="card"><div class="n" id="s-total">0</div><div class="l">Tổng request bị chặn</div></div>
+    <div class="card"><div class="n" id="s-sqli" style="color:var(--sqli)">0</div><div class="l">SQL Injection</div></div>
+    <div class="card"><div class="n" id="s-api" style="color:var(--api)">0</div><div class="l">API Injection</div></div>
+    <div class="card"><div class="n" id="s-ban" style="color:var(--ban)">0</div><div class="l">IP bị khóa tạm</div></div>
+    <div class="card"><div class="n" id="s-rate" style="color:#4cc9f0">0</div><div class="l">Vượt giới hạn tốc độ</div></div>
+  </section>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Thời gian (UTC)</th><th>IP client</th><th>Method</th><th>URI</th>
+        <th>Loại tấn công</th><th>Luật / Vị trí</th><th>Payload</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty">Chưa có request độc hại nào bị chặn.</div>
+  </div>
+</main>
+<script>
+const rows = document.getElementById('rows'), empty = document.getElementById('empty');
+const statusEl = document.getElementById('status');
+let seen = new Set(), first = true;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function refresh(){
+  try{
+    const r = await fetch('/admin/logs?limit=100', {cache:'no-store'});
+    const d = await r.json();
+    document.getElementById('s-total').textContent = d.stats.total;
+    document.getElementById('s-sqli').textContent  = d.stats.SQL_INJECTION;
+    document.getElementById('s-api').textContent   = d.stats.API_INJECTION;
+    document.getElementById('s-ban').textContent   = d.stats.IP_BANNED;
+    document.getElementById('s-rate').textContent  = d.stats.RATE_LIMIT;
+    empty.style.display = d.events.length ? 'none' : 'block';
+    rows.innerHTML = d.events.map(e => {
+      const key = e.timestamp + e.client_ip + e.uri + e.payload;
+      const isNew = !first && !seen.has(key);
+      seen.add(key);
+      return `<tr class="${isNew ? 'new' : ''}">
+        <td>${esc(e.timestamp)}</td><td>${esc(e.client_ip)}</td><td>${esc(e.method)}</td>
+        <td><code>${esc(e.uri)}</code></td>
+        <td><span class="badge ${esc(e.attack_type)}">${esc(e.attack_type)}</span></td>
+        <td>${esc(e.rule)}<br><span class="sub">${esc(e.location)}</span></td>
+        <td><code>${esc(e.payload)}</code></td></tr>`;
+    }).join('');
+    first = false;
+    statusEl.textContent = 'trực tiếp · ' + new Date().toLocaleTimeString();
+  }catch(err){ statusEl.textContent = 'mất kết nối'; }
+}
+document.getElementById('clear').onclick = async () => {
+  if(!confirm('Xóa toàn bộ log cảnh báo?')) return;
+  await fetch('/admin/logs/clear', {method:'POST'}); seen.clear(); first = true; refresh();
+};
+refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>

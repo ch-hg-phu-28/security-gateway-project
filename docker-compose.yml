@@ -1,0 +1,60 @@
+# =============================================================================
+# Security Gateway - Docker Compose
+#   gateway  : OpenResty (Nginx + LuaJIT) - Reverse Proxy + bộ lọc Lua + Dashboard
+#   backend  : Python FastAPI (cố ý có lỗ hổng)
+#   sqlite-data (volume): tầng cơ sở dữ liệu SQLite, bền vững qua các lần chạy
+#   attacker : "Attacker Lab" - chạy bộ kiểm thử từ trong mạng Docker (chỉ khi dùng --profile lab)
+# =============================================================================
+version: '3.8'
+
+services:
+  # 1. Ứng dụng Backend mục tiêu (Python FastAPI)
+  backend:
+    build: ./backend
+    # (không đặt container_name để có thể scale:  docker compose up -d --build --scale backend=3)
+    restart: "no"
+    environment:
+      - DB_PATH=/data/database.db
+    volumes:
+      - sqlite-data:/data           # tầng CSDL SQLite; reset dữ liệu: docker compose down -v
+    ports:
+      - "5000-5010:5000"            # Cổng 5000 CHỈ để demo "tấn công trực tiếp / không có Gateway"
+                                    # (dải cổng cho phép scale nhiều bản sao). Triển khai thật: xóa mục ports.
+    networks:
+      - security-net
+
+  # 2. OpenResty Security Gateway (Lớp bảo vệ ở biên)
+  gateway:
+    build: ./gateway
+    container_name: security_gateway
+    restart: "no"
+    ports:
+      - "80:80"
+    volumes:
+      - ./gateway/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./gateway/lua:/usr/local/openresty/nginx/lua
+      - ./gateway/html:/usr/local/openresty/nginx/admin_html
+      - ./gateway/logs:/var/log/security      # security_alerts.json xuất hiện ngay trên máy host
+    depends_on:
+      - backend
+    networks:
+      - security-net
+
+  # 3. Attacker Lab (tùy chọn):  docker compose --profile lab run --rm attacker
+  attacker:
+    build: ./tests
+    profiles: ["lab"]
+    volumes:
+      - ./tests:/tests
+    depends_on:
+      - gateway
+      - backend
+    networks:
+      - security-net
+
+volumes:
+  sqlite-data:
+
+networks:
+  security-net:
+    driver: bridge

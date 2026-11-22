@@ -1,0 +1,47 @@
+SECURITY GATEWAY - CẤU TRÚC DỰ ÁN VÀ LUỒNG DỮ LIỆU
+==================================================
+
+1. CẤU TRÚC THƯ MỤC
+-------------------
+security-gateway-project/
+├── docker-compose.yml          # Quản lý chung toàn bộ hệ thống đa container
+├── gateway/                    # OpenResty (Nginx + LuaJIT)
+│   ├── Dockerfile
+│   ├── conf/nginx.conf         # Reverse proxy + access_by_lua_file + route /admin
+│   ├── lua/
+│   │   ├── utils.lua           # Bóc tách args/headers/body, URL decode, ghi log JSON, block()
+│   │   ├── security_check.lua  # Module SQLi (Regex) + API Injection (whitelist) + Active Defense
+│   │   └── admin_logs.lua      # API đọc log cho dashboard
+│   ├── html/dashboard.html     # Giao diện theo dõi cảnh báo
+│   └── logs/                   # security_alerts.json (JSON Lines)
+├── backend/                    # Ứng dụng đích (cố ý có lỗ hổng)
+│   ├── Dockerfile, requirements.txt
+│   ├── app.py                  # /api/search (SQLi), /api/update-profile (Mass Assignment), /api/health
+│   └── database.db             # SQLite
+└── tests/                      # attack_demo.sh, attack_tests.py, load_test.py
+
+
+2. LUỒNG DỮ LIỆU (4 BƯỚC)
+-------------------------
+  [ Client / Hacker ]
+          |  (1) HTTP Request: Query, Headers, JSON Body
+          v
+  [ OpenResty Gateway :80 ]
+          |  (2) access_by_lua: bóc tách + URL decode + Regex (SQLi) + Whitelist Schema (API)
+          |
+          +--- Độc hại --> (3B) 403 Forbidden + JSON ----> (4) ghi security_alerts.json
+          |                      (KHÔNG chạm backend)            + docker logs + Dashboard
+          |
+          +--- Sạch ------> (3A) proxy_pass
+                                   v
+                      [ FastAPI Backend :5000 ] --> [ SQLite ]
+                                   |
+                                   v
+                          Response trả về Client
+
+
+3. KỊCH BẢN DEMO
+----------------
+  Trạng thái 1: tấn công thẳng backend (:5000)  -> lộ dữ liệu / nâng quyền  (log có [EXECUTING SQL])
+  Trạng thái 2: cùng payload qua gateway (:80)  -> 403, backend không nhận request, Dashboard sáng lên
+  Trạng thái 3: wrk / load_test.py, 1.000-5.000 request sạch -> RPS + độ trễ chèn thêm (< 5 ms)

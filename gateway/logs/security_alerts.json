@@ -1,0 +1,2 @@
+{"rule":"BOOLEAN_TAUTOLOGY","location":"args:q","attack_type":"SQL_INJECTION","timestamp":"2026-11-22T07:22:46Z","payload":"' OR '1'='1","uri":"/api/search?q=%27+OR+%271%27%3D%271","client_ip":"172.18.0.1","action":"BLOCKED","method":"GET"}
+{"rule":"UNION_SELECT","location":"args:q","attack_type":"SQL_INJECTION","timestamp":"2026-11-22T07:23:55Z","payload":"1' UNION SELECT 1,2,3,4--","uri":"/api/search?q=1%27+UNION%2F%2A%2A%2FSELECT%2F%2A%2A%2F1%2C2%2C3%2C4--","client_ip":"172.18.0.1","action":"BLOCKED","method":"GET"}

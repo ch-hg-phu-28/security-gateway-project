@@ -1,0 +1,1782 @@
+{
+  "info": {
+    "name": "Security Gateway - Demo & Test Suite",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Bo test cho do an Security Gateway.\n\n**Thu tu chay:** 0 -> 1 -> 2 -> 3 -> 4 -> 5 (6 tuy chon).\nBien moi truong: `gateway` (http://localhost), `backend` (http://localhost:5000). Import kem file *SecurityGateway.postman_environment.json*."
+  },
+  "item": [
+    {
+      "name": "0. Kiem tra he thong",
+      "item": [
+        {
+          "name": "0.1 Gateway health (:80)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Co header X-Protected-By\", () => pm.response.to.have.header(\"X-Protected-By\"));",
+                  "const us = parseFloat(pm.response.headers.get(\"X-Inspection-Time-Us\"));",
+                  "pm.test(\"Thoi gian Lua kiem tra < 5 ms (5000 us): \" + us + \" us\", () => pm.expect(us).to.be.below(5000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/health",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Request sach qua Gateway. Xem tab *Headers* cua response: `X-Inspection-Time-Us` la thoi gian rieng cua bo loc Lua (micro giay)."
+          }
+        },
+        {
+          "name": "0.2 Backend health (:5000)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Backend song\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{backend}}/api/health",
+              "host": [
+                "{{backend}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "0.3 Trang Dashboard",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"La trang HTML\", () => pm.expect(pm.response.text()).to.include(\"Security Gateway\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/admin/dashboard",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "admin",
+                "dashboard"
+              ]
+            },
+            "description": "Mo `http://localhost/admin/dashboard` tren trinh duyet de xem realtime khi chay cac request chan."
+          }
+        }
+      ],
+      "description": "Chay truoc tien de chac chan Docker da len."
+    },
+    {
+      "name": "1. TRANG THAI 1 - Tan cong TRUC TIEP Backend (:5000, khong Gateway)",
+      "item": [
+        {
+          "name": "1.1 SQLi tautology ' OR '1'='1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Backend thuc thi cau SQL bi chen (HTTP 200)\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Tra ve du lieu\", () => pm.expect(pm.response.json().data.length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{backend}}/api/search?q=' OR '1'='1",
+              "host": [
+                "{{backend}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "' OR '1'='1"
+                }
+              ]
+            },
+            "description": "Xem log backend: `docker compose logs backend` co dong `[EXECUTING SQL]` chua payload."
+          }
+        },
+        {
+          "name": "1.2 UNION SELECT - lo cau truc CSDL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"LO cau truc bang (CREATE TABLE)\", () => pm.expect(pm.response.text()).to.include(\"CREATE TABLE\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{backend}}/api/search?q=' UNION SELECT 1,name,sql,0 FROM sqlite_master --",
+              "host": [
+                "{{backend}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "' UNION SELECT 1,name,sql,0 FROM sqlite_master --"
+                }
+              ]
+            },
+            "description": "Dung bang `sqlite_master` de doc toan bo schema database."
+          }
+        },
+        {
+          "name": "1.3 UNION SELECT - lay bai viet noi bo (articles)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"LO tai lieu noi bo\", () => pm.expect(pm.response.text()).to.include(\"noi bo\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{backend}}/api/search?q=' UNION SELECT id,title,content,0 FROM articles --",
+              "host": [
+                "{{backend}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "' UNION SELECT id,title,content,0 FROM articles --"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.4 Mass Assignment - tu nang quyen is_admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Backend chap nhan (HTTP 200)\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"is_admin duoc ghi nhan\", () => pm.expect(pm.response.json().updated_data.is_admin).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{backend}}/api/update-profile",
+              "host": [
+                "{{backend}}"
+              ],
+              "path": [
+                "api",
+                "update-profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"chauhoangphu\",\"email\":\"hack@evil.com\",\"is_admin\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**Thay doi du lieu that.** Reset: `docker compose down -v` roi `up -d`."
+          }
+        },
+        {
+          "name": "1.5 Xac nhan chauhoangphu da thanh admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const u = pm.response.json().data.find(x => x.username === \"chauhoangphu\");",
+                  "pm.test(\"chauhoangphu is_admin = true (da bi leo thang dac quyen)\", () => pm.expect(u.is_admin).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{backend}}/api/search?q=chauhoangphu",
+              "host": [
+                "{{backend}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "chauhoangphu"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "description": "CANH BAO: thu muc nay lam thay doi du lieu SQLite. Chay xong nen reset bang `docker compose down -v`."
+    },
+    {
+      "name": "2. TRANG THAI 2 - Cung payload qua GATEWAY (:80) -> bi chan",
+      "item": [
+        {
+          "name": "2A. SQL Injection qua Gateway -> 403",
+          "item": [
+            {
+              "name": "2A.1 Tautology ' OR '1'='1",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=' OR '1'='1",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "' OR '1'='1"
+                    }
+                  ]
+                },
+                "description": "**Anh minh chung muc 3.7.** Sau do xem `docker compose logs gateway` (co [SECURITY_ALERT]) va `docker compose logs backend` (KHONG con [EXECUTING SQL])."
+              }
+            },
+            {
+              "name": "2A.2 UNION SELECT (lo schema)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: UNION_SELECT\", () => pm.expect(j.rule).to.eql(\"UNION_SELECT\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=' UNION SELECT 1,name,sql,0 FROM sqlite_master --",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "' UNION SELECT 1,name,sql,0 FROM sqlite_master --"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2A.3 UNION lay bang articles",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: UNION_SELECT\", () => pm.expect(j.rule).to.eql(\"UNION_SELECT\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=' UNION SELECT id,title,content,0 FROM articles --",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "' UNION SELECT id,title,content,0 FROM articles --"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2A.4 Comment cat cau lenh admin'--",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=admin'--",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "admin'--"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2A.5 Stacked query; DROP TABLE",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: STACKED_QUERY\", () => pm.expect(j.rule).to.eql(\"STACKED_QUERY\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=x'; DROP TABLE users;--",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "x'; DROP TABLE users;--"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2A.6 Time-based blind (randomblob)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: TIME_BASED_BLIND\", () => pm.expect(j.rule).to.eql(\"TIME_BASED_BLIND\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=1' AND 1=randomblob(300000000) --",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "1' AND 1=randomblob(300000000) --"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2A.7 Tham do loi: chi 1 dau nhay '",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: SINGLE_QUOTE\", () => pm.expect(j.rule).to.eql(\"SINGLE_QUOTE\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q='",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "'"
+                    }
+                  ]
+                },
+                "description": "Chi bi chan khi `STRICT_MODE = true` (mac dinh)."
+              }
+            },
+            {
+              "name": "2A.8 Ne tranh: UNION/**/SELECT",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: UNION_SELECT\", () => pm.expect(j.rule).to.eql(\"UNION_SELECT\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=1' UNION/**/SELECT/**/1,2,3,4--",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "1' UNION/**/SELECT/**/1,2,3,4--"
+                    }
+                  ]
+                },
+                "description": "Gateway doi comment `/**/` thanh khoang trang truoc khi so Regex."
+              }
+            },
+            {
+              "name": "2A.9 Ne tranh: chu hoa/thuong",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: UNION_SELECT\", () => pm.expect(j.rule).to.eql(\"UNION_SELECT\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=' UnIoN SeLeCt 1,2,3,4 --",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "' UnIoN SeLeCt 1,2,3,4 --"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2A.10 Ne tranh: ma hoa URL (%27 OR %271%27=%271)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=%27 OR %271%27=%271",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "%27 OR %271%27=%271"
+                    }
+                  ]
+                },
+                "description": "Giong payload trong log Docker cu. Gateway giai ma toi 3 lop."
+              }
+            },
+            {
+              "name": "2A.11 SQLi trong header User-Agent",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: UNION_SELECT\", () => pm.expect(j.rule).to.eql(\"UNION_SELECT\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "User-Agent",
+                    "value": "' UNION SELECT 1,2,3,4 --"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/health",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "health"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "2B. Command Injection / Path Traversal qua Gateway -> 403",
+          "item": [
+            {
+              "name": "2B.1 Command chaining: ; cat /etc/passwd",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: CMD_CHAINING\", () => pm.expect(j.rule).to.eql(\"CMD_CHAINING\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=x; cat /etc/passwd",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "x; cat /etc/passwd"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2B.2 Command chaining: && whoami",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: CMD_CHAINING\", () => pm.expect(j.rule).to.eql(\"CMD_CHAINING\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=x && whoami",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "x && whoami"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2B.3 Command substitution: $(id)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: CMD_SUBSTITUTION\", () => pm.expect(j.rule).to.eql(\"CMD_SUBSTITUTION\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=$(id)",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "$(id)"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2B.4 Path traversal: ../../etc/passwd",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: PATH_TRAVERSAL\", () => pm.expect(j.rule).to.eql(\"PATH_TRAVERSAL\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=../../etc/passwd",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "../../etc/passwd"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "2C. API Injection / Mass Assignment qua Gateway -> 403",
+          "item": [
+            {
+              "name": "2C.1 Mass Assignment: is_admin",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: MASS_ASSIGNMENT\", () => pm.expect(j.rule).to.eql(\"MASS_ASSIGNMENT\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"chauhoangphu\",\"email\":\"hack@evil.com\",\"is_admin\":true}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "**Anh minh chung muc 3.8.** Xem log JSON: `gateway/logs/security_alerts.json`."
+              }
+            },
+            {
+              "name": "2C.2 Leo thang dac quyen: role + is_admin",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"phu\",\"role\":\"administrator\",\"is_admin\":true}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Mau 1 trong Module Dataset."
+              }
+            },
+            {
+              "name": "2C.3 Truong cam long nhau (IsAdmin)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: MASS_ASSIGNMENT\", () => pm.expect(j.rule).to.eql(\"MASS_ASSIGNMENT\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"phu\",\"profile\":{\"IsAdmin\":1}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "2C.4 Type Confusion: age la chuoi",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"phu\",\"age\":\"20; DROP TABLE users\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Bi bat o module SQLi (chuoi doc hai) truoc khi toi kiem tra kieu."
+              }
+            },
+            {
+              "name": "2C.5 Type Confusion: age la chuoi thuong",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: TYPE_CONFUSION\", () => pm.expect(j.rule).to.eql(\"TYPE_CONFUSION\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"phu\",\"age\":\"hai muoi\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Chuoi vo hai nhung SAI KIEU -> chi whitelist schema bat duoc."
+              }
+            },
+            {
+              "name": "2C.6 Type Confusion: age la object",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: TYPE_CONFUSION\", () => pm.expect(j.rule).to.eql(\"TYPE_CONFUSION\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"phu\",\"age\":{\"$gt\":0}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "2C.7 Truong la ngoai whitelist",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: UNEXPECTED_FIELD\", () => pm.expect(j.rule).to.eql(\"UNEXPECTED_FIELD\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"phu\",\"debug\":\"true\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "2C.8 Thieu truong bat buoc (username)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: MISSING_FIELD\", () => pm.expect(j.rule).to.eql(\"MISSING_FIELD\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"email\":\"a@b.com\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "2C.9 JSON hong",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: MALFORMED_JSON\", () => pm.expect(j.rule).to.eql(\"MALFORMED_JSON\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "2C.10 Ne tranh: Content-Type text/plain + JSON",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: MASS_ASSIGNMENT\", () => pm.expect(j.rule).to.eql(\"MASS_ASSIGNMENT\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "text/plain"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"phu\",\"is_admin\":true}",
+                  "options": {
+                    "raw": {
+                      "language": "text"
+                    }
+                  }
+                },
+                "description": "Hacker doi Content-Type de ne parse JSON; Gateway van nhan dien va chan."
+              }
+            },
+            {
+              "name": "2C.11 SQLi nam trong gia tri JSON",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = SQL_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"SQL_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/update-profile",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "update-profile"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"username\":\"admin' OR '1'='1\",\"email\":\"a@b.com\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "2C.12 HTTP Parameter Pollution ?q=a&q=b",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                      "const j = pm.response.json();",
+                      "pm.test(\"attack_type = API_INJECTION\", () => pm.expect(j.attack_type).to.eql(\"API_INJECTION\"));",
+                      "pm.test(\"Header X-Blocked-By = Security-Gateway\", () => pm.response.to.have.header(\"X-Blocked-By\", \"Security-Gateway\"));",
+                      "pm.test(\"Body JSON co status=blocked\", () => pm.expect(j.status).to.eql(\"blocked\"));",
+                      "pm.test(\"Luat kich hoat: ARG_SCHEMA_VIOLATION\", () => pm.expect(j.rule).to.eql(\"ARG_SCHEMA_VIOLATION\"));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/search?q=a&q=b",
+                  "host": [
+                    "{{gateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "a"
+                    },
+                    {
+                      "key": "q",
+                      "value": "b"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Moi request ky vong **403 Forbidden** + JSON. Backend khong nhan request nao (kiem tra `docker compose logs backend`)."
+    },
+    {
+      "name": "3. Request SACH - phai di qua (200)",
+      "item": [
+        {
+          "name": "3.1 Tim kiem binh thuong: phu",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Khong bi chan (khong co X-Blocked-By)\", () => pm.response.to.not.have.header(\"X-Blocked-By\"));",
+                  "pm.test(\"Co du lieu\", () => pm.expect(pm.response.json().data.length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/search?q=phu",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "phu"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.2 Tu khoa trung ten lenh (cat, id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Khong bi chan (khong co X-Blocked-By)\", () => pm.response.to.not.have.header(\"X-Blocked-By\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/search?q=cat id bash",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "cat id bash"
+                }
+              ]
+            },
+            "description": "Khong co ky tu noi lenh (; && |) nen khong bi nham la Command Injection."
+          }
+        },
+        {
+          "name": "3.3 Tieng Viet co dau",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Khong bi chan (khong co X-Blocked-By)\", () => pm.response.to.not.have.header(\"X-Blocked-By\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/search?q=Nguyễn Thành",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Nguyễn Thành"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.4 Cap nhat profile hop le",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Khong bi chan (khong co X-Blocked-By)\", () => pm.response.to.not.have.header(\"X-Blocked-By\"));",
+                  "pm.test(\"Backend xu ly\", () => pm.expect(pm.response.json().status).to.eql(\"success\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/update-profile",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "update-profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"nguyenthanhphi\",\"email\":\"phi@gmail.com\",\"age\":21}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "description": "Chung minh Gateway KHONG chan nham luu luong hop le (False Positive = 0 tren tap nay)."
+    },
+    {
+      "name": "4. Han che da biet - False Positive",
+      "item": [
+        {
+          "name": "4.1 Ten co dau nhay: O'Brien",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"[HAN CHE] STRICT_MODE chan nham chuoi hop le (403)\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/search?q=O'Brien",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "O'Brien"
+                }
+              ]
+            },
+            "description": "Minh hoa nhuoc diem muc 4.2: luat dau nhay don gay False Positive. Dat `STRICT_MODE = false` thi se 200 (khi do test nay se FAIL - dung nhu mong doi)."
+          }
+        },
+        {
+          "name": "4.2 Van ban co dau cham phay",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"[HAN CHE] STRICT_MODE chan nham (403)\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/search?q=hello; world",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "hello; world"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Log & Dashboard (chay SAU thu muc 2)",
+      "item": [
+        {
+          "name": "5.1 API log: cac luot chan moi nhat",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"Co thong ke: tong luot chan > 0\", () => pm.expect(j.stats.total).to.be.above(0));",
+                  "const e = j.events[0];",
+                  "pm.test(\"Ban ghi co du truong\", () => [\"timestamp\",\"client_ip\",\"method\",\"uri\",\"attack_type\",\"payload\"].forEach(k => pm.expect(e).to.have.property(k)));",
+                  "pm.test(\"attack_type hop le\", () => pm.expect([\"SQL_INJECTION\",\"API_INJECTION\",\"RATE_LIMIT\",\"IP_BANNED\"]).to.include(e.attack_type));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/admin/logs?limit=20",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "admin",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Chinh la du lieu Dashboard dang doc. Ban ghi dau tien la luot chan **moi nhat**."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Rate Limiting (tuy chon)",
+      "item": [
+        {
+          "name": "6.1 Spam request (dung Runner, 120 iterations)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 (binh thuong) hoac 429 (bi gioi han toc do)\", () => pm.expect([200, 429]).to.include(pm.response.code));",
+                  "if (pm.response.code === 429) { pm.test(\"attack_type = RATE_LIMIT\", () => pm.expect(pm.response.json().attack_type).to.eql(\"RATE_LIMIT\")); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/search?q=phu",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "phu"
+                }
+              ]
+            },
+            "description": "Bat `RATE_LIMIT = true` trong `gateway/lua/security_check.lua`, `docker compose restart gateway`, roi chay request nay bang **Runner** voi 120 iterations, delay 0 ms. Tu request thu 101 se nhan 429. Xong nho tat lai."
+          }
+        }
+      ]
+    }
+  ]
+}
